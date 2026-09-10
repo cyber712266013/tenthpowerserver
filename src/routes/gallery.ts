@@ -16,8 +16,8 @@ galleryRouter.get('/', async (c) => {
       success: true,
       data: rows.map((g) => ({
         id: g.id,
-        title_ar: g.title_ar || g.file_name || 'صورة من مشاريعنا',
-        category_ar: g.category || 'واجهات سيكوريت',
+        title_ar: g.title_ar?.trim() || '',
+        category_ar: g.category?.trim() || '',
         image_url: g.cdn_url || g.file_url || '',
       })),
     });
