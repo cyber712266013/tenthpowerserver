@@ -1,3 +1,10 @@
+import {
+  chatWithGemini,
+  processChatLead,
+  getSmartFallbackResponse,
+  getSuggestedActions,
+} from '../../src/lib/ai/index.mjs';
+
 export default async (req, context) => {
   // CORS Headers
   const corsHeaders = {
@@ -379,6 +386,239 @@ ${escapeHtml(data.message)}
         [COMPANY_SLUG, token, platform || 'fcm_android', JSON.stringify(device_info || {})]
       );
       return json({ success: ok, message: ok ? 'Subscribed' : 'Failed' });
+    }
+
+    // 10. AI Chat Endpoint for Mobile/Android (POST)
+    if ((pathname.endsWith('/api/v1/chat') || pathname.endsWith('/chat')) && req.method === 'POST') {
+      const payload = await req.json().catch(() => ({}));
+      const {
+        messages = [],
+        locale = 'ar',
+        previous_interaction_id,
+        interaction_id,
+        session_id,
+        stream = false,
+      } = payload;
+
+      const isAr = locale === 'ar';
+      const lastUserMessage = messages?.[messages.length - 1]?.content ?? payload.message ?? '';
+      const previousId = previous_interaction_id || interaction_id || null;
+
+      let companyId = '00d8d3a7-fa3b-4dd5-bf05-8081a6fc1089';
+      try {
+        const compRows = await queryNeon(
+          `SELECT id FROM companies WHERE slug = $1 OR slug ILIKE '%tenth%' LIMIT 1`,
+          [COMPANY_SLUG]
+        );
+        if (compRows && compRows.length > 0) {
+          companyId = compRows[0].id;
+        }
+      } catch (_) {}
+
+      let leadCaptured = false;
+      let leadPhone = '';
+      let leadName = '';
+
+      if (lastUserMessage) {
+        try {
+          const leadResult = await processChatLead({
+            text: lastUserMessage,
+            sessionId: session_id,
+            locale,
+            companyId,
+            queryNeon,
+            executeNeon,
+            notifyTelegramAdmins,
+          });
+
+          if (leadResult && leadResult.captured && leadResult.phone) {
+            leadCaptured = true;
+            leadPhone = leadResult.phone;
+            leadName = leadResult.name || '';
+          }
+        } catch (leadErr) {
+          console.warn('[Netlify Chat] Lead capture error:', leadErr.message);
+        }
+      }
+
+      let aiResponseText = '';
+      let nextInteractionId = previousId;
+
+      if (lastUserMessage) {
+        try {
+          const promptOverrideNote = leadCaptured
+            ? isAr
+              ? `العميل أرسل بياناته الآن (الاسم: ${leadName}، الجوال: ${leadPhone}). تم حفظ طلبه في النظام وإرسال إشعار فوري لمهندسينا. اشكر العميل بحرارة وأكد له أن المهندس المختص سيتواصل معه عبر الهاتف أو الواتساب في أقرب وقت لمناقشة مقايسة مشروعه.`
+              : `Client just provided contact info (Name: ${leadName}, Phone: ${leadPhone}). Details were forwarded to our engineers. Thank the client warmly and confirm that an engineer will contact them promptly.`
+            : undefined;
+
+          const aiResult = await chatWithGemini({
+            input: lastUserMessage,
+            messages,
+            previousInteractionId: previousId,
+            locale,
+            systemPromptOverride: promptOverrideNote,
+            queryNeon,
+          });
+
+          if (aiResult?.text) {
+            aiResponseText = aiResult.text;
+            nextInteractionId = aiResult.interactionId || previousId;
+          }
+        } catch (geminiErr) {
+          console.error('[Netlify Chat] Gemini call error:', geminiErr.message);
+        }
+      }
+
+      if (!aiResponseText) {
+        aiResponseText = getSmartFallbackResponse({
+          input: lastUserMessage,
+          leadCaptured,
+          leadPhone,
+          locale,
+        });
+      }
+
+      let currentSessionId = session_id;
+      try {
+        if (!currentSessionId) {
+          const contextObj = {
+            locale,
+            last_interaction_id: nextInteractionId,
+            lead_captured: leadCaptured,
+            lead_phone: leadPhone || null,
+            platform: 'android_app',
+          };
+          const sessRows = await queryNeon(
+            `INSERT INTO chat_sessions (id, company_id, status, message_count, context, created_at)
+             VALUES (gen_random_uuid(), $1, 'active', 2, $2, NOW())
+             RETURNING id;`,
+            [companyId, JSON.stringify(contextObj)]
+          );
+          if (sessRows && sessRows.length > 0) {
+            currentSessionId = sessRows[0].id;
+          }
+        } else {
+          const contextObj = {
+            locale,
+            last_interaction_id: nextInteractionId,
+            lead_captured: leadCaptured,
+            lead_phone: leadPhone || null,
+            platform: 'android_app',
+          };
+          await executeNeon(
+            `UPDATE chat_sessions
+             SET message_count = COALESCE(message_count, 0) + 2,
+                 context = $1
+             WHERE id::text = $2`,
+            [JSON.stringify(contextObj), currentSessionId]
+          );
+        }
+
+        if (currentSessionId && lastUserMessage) {
+          const actions = getSuggestedActions(aiResponseText, locale);
+          await executeNeon(
+            `INSERT INTO chat_messages (id, session_id, role, content, created_at)
+             VALUES (gen_random_uuid(), $1, 'user', $2, NOW())`,
+            [currentSessionId, lastUserMessage]
+          );
+          await executeNeon(
+            `INSERT INTO chat_messages (id, session_id, role, content, suggested_actions, created_at)
+             VALUES (gen_random_uuid(), $1, 'assistant', $2, $3, NOW())`,
+            [currentSessionId, aiResponseText, actions.map((a) => a.screen)]
+          );
+        }
+      } catch (dbErr) {
+        console.warn('[Netlify Chat] Session persistence warning:', dbErr.message);
+      }
+
+      const suggestedActions = getSuggestedActions(aiResponseText, locale);
+
+      // Check stream preference
+      const wantsStream =
+        stream === true ||
+        url.searchParams.get('stream') === 'true' ||
+        req.headers.get('accept')?.includes('text/event-stream');
+
+      if (wantsStream) {
+        const encoder = new TextEncoder();
+        const readable = new ReadableStream({
+          async start(controller) {
+            const words = aiResponseText.split(' ');
+            for (let i = 0; i < words.length; i++) {
+              controller.enqueue(encoder.encode(words[i] + (i === words.length - 1 ? '' : ' ')));
+              await new Promise((r) => setTimeout(r, 18));
+            }
+            controller.close();
+          },
+        });
+
+        return new Response(readable, {
+          headers: {
+            'Content-Type': 'text/plain; charset=utf-8',
+            'Cache-Control': 'no-cache',
+            'x-interaction-id': nextInteractionId || '',
+            'x-session-id': currentSessionId || '',
+            'x-lead-captured': leadCaptured ? 'true' : 'false',
+            ...corsHeaders,
+          },
+        });
+      }
+
+      return new Response(
+        JSON.stringify({
+          success: true,
+          data: {
+            text: aiResponseText,
+            role: 'assistant',
+            session_id: currentSessionId,
+            interaction_id: nextInteractionId,
+            lead_captured: leadCaptured,
+            lead_info: leadCaptured ? { name: leadName, phone: leadPhone } : null,
+            suggested_actions: suggestedActions,
+          },
+        }),
+        {
+          status: 200,
+          headers: {
+            'Content-Type': 'application/json; charset=utf-8',
+            'x-interaction-id': nextInteractionId || '',
+            'x-session-id': currentSessionId || '',
+            'x-lead-captured': leadCaptured ? 'true' : 'false',
+            ...corsHeaders,
+          },
+        }
+      );
+    }
+
+    // 11. AI Chat History (GET)
+    if ((pathname.endsWith('/api/v1/chat/history') || pathname.endsWith('/chat/history')) && req.method === 'GET') {
+      const sessionId = url.searchParams.get('session_id');
+      if (!sessionId) {
+        return json({ success: false, error: 'session_id query parameter is required' }, 400);
+      }
+
+      try {
+        const rows = await queryNeon(
+          `SELECT id, role, content, created_at FROM chat_messages WHERE session_id::text = $1 ORDER BY created_at ASC`,
+          [sessionId]
+        );
+
+        return json({
+          success: true,
+          data: {
+            session_id: sessionId,
+            messages: rows.map((m) => ({
+              id: m.id,
+              role: m.role,
+              content: m.content,
+              created_at: m.created_at,
+            })),
+          },
+        });
+      } catch (err) {
+        return json({ success: false, error: err.message }, 500);
+      }
     }
 
     // 404

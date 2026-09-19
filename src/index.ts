@@ -8,6 +8,7 @@ import { galleryRouter } from './routes/gallery.js';
 import { adsRouter } from './routes/ads.js';
 import { contactRouter } from './routes/contact.js';
 import { pushRouter } from './routes/push.js';
+import { chatRouter } from './routes/chat.js';
 
 export const app = new Hono();
 
@@ -40,5 +41,6 @@ app.route('/api/v1/gallery', galleryRouter);
 app.route('/api/v1/ads', adsRouter);
 app.route('/api/v1/contact', contactRouter);
 app.route('/api/v1/push', pushRouter);
+app.route('/api/v1/chat', chatRouter);
 
 export default app;
