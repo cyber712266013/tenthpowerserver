@@ -8,6 +8,7 @@ import {
   getSmartFallbackResponse,
   getSuggestedActions,
 } from './src/lib/ai/index.mjs';
+import { handleMarketplace } from './src/marketplace.mjs';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -56,7 +57,41 @@ async function notifyTelegramAdmins(data) {
     return [{ ok: false, description: 'Missing token or admin IDs' }];
   }
   const time = new Date().toLocaleString('ar-SA', { timeZone: 'Asia/Riyadh' });
-  const text = 
+
+  // ── نوع الإشعار: إعلان سوق جديد ──────────────────────────────────────────
+  if (data.type === 'new_listing') {
+    const text =
+`🛒 <b>إعلان جديد في السوق — بانتظار المراجعة</b>
+━━━━━━━━━━━━━━━━━━━
+📦 <b>العنوان:</b> ${escapeHtml(data.title)}
+👤 <b>البائع:</b> ${escapeHtml(data.seller)}
+📍 <b>المدينة:</b> ${escapeHtml(data.city)}
+🆔 <b>المعرّف:</b> <code>${data.listing_id}</code>
+━━━━━━━━━━━━━━━━━━━
+🕒 ${time}
+
+✅ للموافقة: POST /api/v2/admin/listings/${data.listing_id}/approve
+❌ للرفض: POST /api/v2/admin/listings/${data.listing_id}/reject`;
+
+    const results = [];
+    for (const chatId of TELEGRAM_ADMIN_IDS) {
+      try {
+        const res = await fetch(`https://api.telegram.org/bot${TELEGRAM_BOT_TOKEN}/sendMessage`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ chat_id: chatId, text, parse_mode: 'HTML' }),
+        });
+        const j = await res.json();
+        results.push({ chatId, ok: j.ok });
+      } catch (err) {
+        results.push({ chatId, ok: false, error: err.message });
+      }
+    }
+    return results;
+  }
+
+  // ── نوع الإشعار: طلب عرض سعر (الموجود أصلاً) ──────────────────────────────
+  const text =
 `🔔 <b>طلب عرض سعر جديد من التطبيق</b> 🏗️
 ━━━━━━━━━━━━━━━━━━━
 👤 <b>الاسم:</b> ${escapeHtml(data.name)}
@@ -854,11 +889,43 @@ const server = http.createServer(async (req, res) => {
       }
     }
 
-    // 404
-    return json({ success: false, error: 'Endpoint not found' }, 404);
+    // ── Marketplace & Auth v2 Routes ──────────────────────────────────────
+    const bodyText = await new Promise((resolve) => {
+      let raw = '';
+      req.on('data', (chunk) => (raw += chunk));
+      req.on('end', () => resolve(raw));
+    }).catch(() => '');
+
+    let parsedBody = {};
+    try { parsedBody = bodyText ? JSON.parse(bodyText) : {}; } catch { /* ok */ }
+
+    const matched = await handleMarketplace({
+      pathname,
+      method: req.method,
+      url,
+      body: parsedBody,
+      req,
+      json,
+      queryNeon,
+      notifyTelegramAdmins,
+      config: {
+        JWT_SECRET: process.env.JWT_SECRET || 'tenthpower_marketplace_secret_change_in_prod_2024',
+        FIREBASE_SERVICE_ACCOUNT: process.env.FIREBASE_SERVICE_ACCOUNT || '',
+        FIREBASE_PROJECT_ID: process.env.FIREBASE_PROJECT_ID || 'coffee-spark-ai-barista-1b800',
+        ADMIN_SECRET_KEY: process.env.ADMIN_SECRET_KEY || '',
+      },
+    });
+    if (matched) return;
+
+    // 404 — only if no response sent yet
+    if (!res.headersSent) {
+      return json({ success: false, error: 'Endpoint not found' }, 404);
+    }
   } catch (err) {
-    console.error('Server error:', err);
-    return json({ success: false, error: err.message }, 500);
+    console.error('Server error:', err.message);
+    if (!res.headersSent) {
+      return json({ success: false, error: err.message }, 500);
+    }
   }
 });
 
@@ -872,5 +939,13 @@ server.listen(PORT, () => {
   console.log(`   👉 http://localhost:${PORT}/api/v1/gallery`);
   console.log(`   👉 http://localhost:${PORT}/api/v1/ads`);
   console.log(`   👉 http://localhost:${PORT}/api/v1/chat (AI Chat Engine 🤖)`);
+  console.log(`   ── Marketplace v2 ──────────────────────────────────`);
+  console.log(`   👉 POST http://localhost:${PORT}/api/v2/auth/google`);
+  console.log(`   👉 POST http://localhost:${PORT}/api/v2/auth/device`);
+  console.log(`   👉 GET  http://localhost:${PORT}/api/v2/me`);
+  console.log(`   👉 GET  http://localhost:${PORT}/api/v2/marketplace/categories`);
+  console.log(`   👉 GET  http://localhost:${PORT}/api/v2/marketplace/listings`);
+  console.log(`   👉 POST http://localhost:${PORT}/api/v2/marketplace/listings`);
+  console.log(`   👉 GET  http://localhost:${PORT}/api/v2/admin/listings (Admin)`);
   console.log(`======================================================\n`);
 });
