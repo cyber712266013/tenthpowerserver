@@ -4,6 +4,7 @@ import {
   getSmartFallbackResponse,
   getSuggestedActions,
 } from '../../src/lib/ai/index.mjs';
+import { handleMarketplace } from '../../src/marketplace.mjs';
 
 export default async (req, context) => {
   // CORS Headers
@@ -621,6 +622,36 @@ ${escapeHtml(data.message)}
       }
     }
 
+    // ── Marketplace & Auth v2 Routes (/api/v2/*) ──────────────────────────
+    let parsedBody = {};
+    try {
+      const bodyText = await req.text().catch(() => '');
+      parsedBody = bodyText ? JSON.parse(bodyText) : {};
+    } catch { /* ok */ }
+
+    const matched = await handleMarketplace({
+      pathname,
+      method: req.method,
+      url,
+      body: parsedBody,
+      req,
+      json,
+      queryNeon,
+      notifyTelegramAdmins,
+      config: {
+        JWT_SECRET: process.env.JWT_SECRET || 'tenthpower_marketplace_secret_change_in_prod_2024',
+        FIREBASE_SERVICE_ACCOUNT: process.env.FIREBASE_SERVICE_ACCOUNT || '',
+        FIREBASE_PROJECT_ID: process.env.FIREBASE_PROJECT_ID || 'coffee-spark-ai-barista-1b800',
+        ADMIN_SECRET_KEY: process.env.ADMIN_SECRET_KEY || '',
+        R2_ACCOUNT_ID: process.env.R2_ACCOUNT_ID || '',
+        R2_ACCESS_KEY_ID: process.env.R2_ACCESS_KEY_ID || '',
+        R2_SECRET_ACCESS_KEY: process.env.R2_SECRET_ACCESS_KEY || '',
+        R2_BUCKET_NAME: process.env.R2_BUCKET_NAME || 'powerof',
+        R2_PUBLIC_URL: process.env.R2_PUBLIC_URL || 'https://pub-e9788e46474044d585e2622e2c6ce74d.r2.dev',
+      },
+    });
+    if (matched) return;
+
     // 404
     return json({ success: false, error: 'Endpoint not found' }, 404);
   } catch (err) {
@@ -630,5 +661,5 @@ ${escapeHtml(data.message)}
 };
 
 export const config = {
-  path: ['/*', '/api/v1/*'],
+  path: ['/*', '/api/v1/*', '/api/v2/*'],
 };
