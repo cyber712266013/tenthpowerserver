@@ -60,7 +60,7 @@ export async function uploadToR2({
   config = {},
 }) {
   const bucketName = config.R2_BUCKET_NAME || process.env.R2_BUCKET_NAME || 'powerof';
-  const publicUrlBase = (config.R2_PUBLIC_URL || process.env.R2_PUBLIC_URL || 'https://pub-e9788e46474044d585e2622e2c6ce74d.r2.dev').replace(/\/$/, '');
+  const publicUrlBase = (config.R2_PUBLIC_URL || process.env.R2_PUBLIC_URL || '').replace(/\/$/, '');
 
   let buffer;
   let resolvedMime = mimeType;
@@ -131,7 +131,7 @@ export async function deleteFromR2(keyOrUrl, config = {}) {
   if (!keyOrUrl) return false;
   try {
     const bucketName = config.R2_BUCKET_NAME || process.env.R2_BUCKET_NAME || 'powerof';
-    const publicUrlBase = (config.R2_PUBLIC_URL || process.env.R2_PUBLIC_URL || 'https://pub-e9788e46474044d585e2622e2c6ce74d.r2.dev').replace(/\/$/, '');
+    const publicUrlBase = (config.R2_PUBLIC_URL || process.env.R2_PUBLIC_URL || '').replace(/\/$/, '');
 
     let key = String(keyOrUrl).trim();
     if (key.startsWith('http://') || key.startsWith('https://')) {

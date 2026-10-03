@@ -31,9 +31,9 @@ export default async (req, context) => {
     });
   };
 
-  const NEON_CONN = process.env.NEON_DATABASE_URL || 'postgresql://neondb_owner:npg_d2oRPN7OIcmA@ep-muddy-cloud-axv9ixcc-pooler.c-4.us-east-2.aws.neon.tech/Powerof10?sslmode=require&channel_binding=require';
+  const NEON_CONN = process.env.NEON_DATABASE_URL || '';
   const COMPANY_SLUG = process.env.COMPANY_SLUG || 'tenth-power';
-  const TELEGRAM_BOT_TOKEN = process.env.TELEGRAM_BOT_TOKEN || '8955032327:AAF2Uehcl6-cRr3MfIckeoLuFrRjyqO9bdo';
+  const TELEGRAM_BOT_TOKEN = process.env.TELEGRAM_BOT_TOKEN || '';
   const defaultAdminIds = ['5887234832'];
   const envAdminIds = (process.env.TELEGRAM_ADMIN_IDS || '')
     .split(',')
@@ -647,7 +647,7 @@ ${escapeHtml(data.message)}
         R2_ACCESS_KEY_ID: process.env.R2_ACCESS_KEY_ID || '',
         R2_SECRET_ACCESS_KEY: process.env.R2_SECRET_ACCESS_KEY || '',
         R2_BUCKET_NAME: process.env.R2_BUCKET_NAME || 'powerof',
-        R2_PUBLIC_URL: process.env.R2_PUBLIC_URL || 'https://pub-e9788e46474044d585e2622e2c6ce74d.r2.dev',
+        R2_PUBLIC_URL: process.env.R2_PUBLIC_URL || '',
       },
     });
     if (matched) return;

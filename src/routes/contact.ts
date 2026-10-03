@@ -12,7 +12,7 @@ function escapeHtml(str: string) {
 }
 
 async function notifyTelegramAdmins(data: { name: string; phone: string; service_type?: string; message: string }) {
-  const token = process.env.TELEGRAM_BOT_TOKEN || '8955032327:AAF2Uehcl6-cRr3MfIckeoLuFrRjyqO9bdo';
+  const token = process.env.TELEGRAM_BOT_TOKEN || '';
   const defaultAdminIds = ['5887234832'];
   const envAdminIds = (process.env.TELEGRAM_ADMIN_IDS || '')
     .split(',')
