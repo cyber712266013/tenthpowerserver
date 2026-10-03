@@ -65,6 +65,7 @@ await run(`
     social_links    JSONB DEFAULT '{}',
     role            TEXT NOT NULL DEFAULT 'user'
                     CHECK (role IN ('user', 'moderator', 'admin')),
+    is_verified     BOOLEAN NOT NULL DEFAULT false,
     is_active       BOOLEAN NOT NULL DEFAULT true,
     is_banned       BOOLEAN NOT NULL DEFAULT false,
     last_login_at   TIMESTAMPTZ,
@@ -73,6 +74,9 @@ await run(`
   )
 `);
 console.log('✅ app_users table ready');
+
+await run(`ALTER TABLE app_users ADD COLUMN IF NOT EXISTS is_verified BOOLEAN NOT NULL DEFAULT false`);
+console.log('✅ is_verified column ensured on app_users');
 
 await run(`CREATE INDEX IF NOT EXISTS idx_app_users_email  ON app_users(email)`);
 await run(`CREATE INDEX IF NOT EXISTS idx_app_users_google ON app_users(google_id)`);

@@ -1,4 +1,5 @@
 # 🤖 دليل تكامل شات الذكاء الاصطناعي لتطبيقات أندرويد والجوال
+
 ### Tenth Power AI Chat Integration Guide for Android / Flutter
 
 هذا الدليل مخصص لمطوري تطبيقات الأندرويد والجوال للربط المباشر مع نقطة نهاية شات الذكاء الاصطناعي (`/api/v1/chat`).
@@ -14,19 +15,21 @@
 
 - **عنوان الخادم الأساسي (Base URL):**
   - محلياً للتطوير: `http://10.0.2.2:8787` (لمحاكي أندرويد الافتراضي) أو `http://localhost:8787`
-  - السحابي المباشر: `https://tenthpowerserver.netlify.app`
+  - السحابي المباشر: `https://tenthpowerserver1.netlify.app`
 
 ---
 
 ## 📡 2. مسار إرسال الرسالة (`POST /api/v1/chat`)
 
 ### أ) ترويسات الطلب (Headers)
+
 ```http
 Content-Type: application/json
 Accept: application/json
 ```
 
 ### ب) جسم الطلب (Request Body)
+
 ```json
 {
   "messages": [
@@ -39,7 +42,8 @@ Accept: application/json
 }
 ```
 
-#### المعلمات (Parameters):
+#### المعلمات (Parameters)
+
 - `messages` (إلزامي): مصفوفة الرسائل الأخيرة. كل عنصر يحتوي على `role` (`user` أو `assistant`) و `content` (نص الرسالة).
 - `locale` (اختياري، الافتراضي `"ar"`): لغة الردود (`"ar"` أو `"en"`).
 - `previous_interaction_id` (اختياري): المعرف المستلم في الرد السابق للحفاظ على ذاكرة السياق المتعدد (Multi-turn Stateful interaction).
@@ -49,6 +53,7 @@ Accept: application/json
 ---
 
 ### ج) استجابة الـ JSON القياسية (Response Body)
+
 ```json
 {
   "success": true,
@@ -85,11 +90,13 @@ Accept: application/json
 ## 🎯 3. التقاط بيانات التواصل الذكي (Automatic Lead Capture)
 
 عندما يكتب العميل رقم جواله في الشات (مثال: `"اسمي م. أحمد وهذا جوالي 0551234567 لطلب مقايسة واجهات"`):
+
 1. السيرفر يقوم **فوراً وبشكل تلقائي** بما يلي:
    - استخراج الاسم ورقم الجوال.
    - حفظ بياناته في جدول `users` وجدول `messages` وجدول `quote_requests` في قاعدة بيانات Neon.
    - إرسال تنبيه Telegram فوري للمدراء عبر البوت بهاتفه ونصه.
 2. يتضمن كائن الرد:
+
    ```json
    "lead_captured": true,
    "lead_info": {
@@ -97,6 +104,7 @@ Accept: application/json
      "phone": "0551234567"
    }
    ```
+
 3. يمكنك في واجهة الأندرويد إظهار رسالة تأكيد أو شارة خضراء تفيد بأنه: `"تم إرسال بياناتك للمهندس المختص وسيتصل بك قريباً"`.
 
 ---
@@ -116,13 +124,14 @@ Accept: application/json
 
 ## 📱 5. أمثلة كود التكامل البرمجي
 
-### أ) باستخدام Flutter / Dart:
+### أ) باستخدام Flutter / Dart
+
 ```dart
 import 'dart:convert';
 import 'package:http/http.dart' as http;
 
 class AiChatService {
-  final String baseUrl = 'https://tenthpowerserver.netlify.app/api/v1';
+  final String baseUrl = 'https://tenthpowerserver1.netlify.app/api/v1';
   String? sessionId;
   String? previousInteractionId;
 
@@ -162,7 +171,8 @@ class AiChatService {
 
 ---
 
-### ب) باستخدام Android / Kotlin (Retrofit):
+### ب) باستخدام Android / Kotlin (Retrofit)
+
 ```kotlin
 data class ChatMessage(
     val role: String,

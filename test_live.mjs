@@ -1,4 +1,4 @@
-const BASE_URL = 'https://tenthpowerserver.netlify.app';
+const BASE_URL = 'https://tenthpowerserver1.netlify.app';
 
 console.log(`\n======================================================`);
 console.log(`🧪 TESTING LIVE NETLIFY API: ${BASE_URL}`);
@@ -13,7 +13,7 @@ async function testEndpoint(name, url, options = {}) {
     let json = null;
     try {
       json = JSON.parse(text);
-    } catch (_) {}
+    } catch (_) { }
 
     if (res.ok) {
       console.log(`✅ [${res.status}] ${name} (${duration}ms)`);

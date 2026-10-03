@@ -2,6 +2,7 @@ import http from 'node:http';
 import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
+import dotenv from 'dotenv';
 import {
   chatWithGemini,
   processChatLead,
@@ -9,30 +10,16 @@ import {
   getSuggestedActions,
 } from './src/lib/ai/index.mjs';
 import { handleMarketplace } from './src/marketplace.mjs';
+import { extractAuthUser } from './src/marketplace/jwt.mjs';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
-// Load .env manually if exists
-function loadEnv() {
-  const envPath = path.join(__dirname, '.env');
-  if (fs.existsSync(envPath)) {
-    const content = fs.readFileSync(envPath, 'utf8');
-    for (const line of content.split('\n')) {
-      const trimmed = line.trim();
-      if (!trimmed || trimmed.startsWith('#')) continue;
-      const idx = trimmed.indexOf('=');
-      if (idx > 0) {
-        const key = trimmed.slice(0, idx).trim();
-        const val = trimmed.slice(idx + 1).trim();
-        process.env[key] = val;
-      }
-    }
-  }
-}
-loadEnv();
+// Load .env reliably
+dotenv.config({ path: path.join(__dirname, '.env') });
 
 const PORT = Number(process.env.PORT) || 8787;
+const JWT_SECRET = process.env.JWT_SECRET || 'tenthpower_marketplace_secret_change_in_prod_2024';
 const NEON_CONN = process.env.NEON_DATABASE_URL || 'postgresql://neondb_owner:npg_d2oRPN7OIcmA@ep-muddy-cloud-axv9ixcc-pooler.c-4.us-east-2.aws.neon.tech/Powerof10?sslmode=require&channel_binding=require';
 const COMPANY_SLUG = process.env.COMPANY_SLUG || 'tenth-power';
 const TELEGRAM_BOT_TOKEN = process.env.TELEGRAM_BOT_TOKEN || '8955032327:AAF2Uehcl6-cRr3MfIckeoLuFrRjyqO9bdo';
@@ -686,9 +673,46 @@ const server = http.createServer(async (req, res) => {
             }
           } catch (_) {}
 
+          // استخراج والتعرف على المستخدم المسجل (عبر التوكن أو البيانات المرفقة)
+          let userProfile = null;
+          try {
+            const authUser = extractAuthUser(req, JWT_SECRET);
+            if (authUser?.sub) {
+              const uRows = await queryNeon(
+                `SELECT id, display_name, phone, bio, city, role, is_verified FROM app_users WHERE id = $1 LIMIT 1`,
+                [authUser.sub]
+              );
+              if (uRows && uRows.length > 0) {
+                userProfile = {
+                  id: uRows[0].id,
+                  name: uRows[0].display_name,
+                  phone: uRows[0].phone,
+                  bio: uRows[0].bio,
+                  city: uRows[0].city,
+                  role: uRows[0].role,
+                  isVerified: uRows[0].is_verified,
+                };
+              }
+            }
+          } catch (authErr) {
+            console.warn('[Chat Handler] Auth user extract error:', authErr.message);
+          }
+
+          // بديل: إذا أرسل التطبيق بيانات المستخدم في الـ body
+          if (!userProfile && (payload.user_profile || payload.name || payload.user_name)) {
+            userProfile = {
+              name: payload.name || payload.user_name || payload.user_profile?.display_name || payload.user_profile?.name || '',
+              phone: payload.phone || payload.user_phone || payload.user_profile?.phone || '',
+              bio: payload.bio || payload.user_bio || payload.user_profile?.bio || '',
+              city: payload.city || payload.user_city || payload.user_profile?.city || '',
+              role: payload.role || payload.user_profile?.role || 'user',
+              isVerified: payload.user_profile?.is_verified ?? false,
+            };
+          }
+
           let leadCaptured = false;
-          let leadPhone = '';
-          let leadName = '';
+          let leadPhone = userProfile?.phone || '';
+          let leadName = userProfile?.name || '';
 
           // 1. فحص والتقاط بيانات العميل (رقم الجوال + الاسم + حفظ DB + إشعار تلجرام فوري)
           if (lastUserMessage) {
@@ -706,7 +730,7 @@ const server = http.createServer(async (req, res) => {
               if (leadResult && leadResult.captured && leadResult.phone) {
                 leadCaptured = true;
                 leadPhone = leadResult.phone;
-                leadName = leadResult.name || '';
+                leadName = leadResult.name || leadName;
               }
             } catch (leadErr) {
               console.warn('[Chat Handler] Lead capture error:', leadErr.message);
@@ -723,14 +747,16 @@ const server = http.createServer(async (req, res) => {
                 ? isAr
                   ? `العميل أرسل بياناته الآن (الاسم: ${leadName}، الجوال: ${leadPhone}). تم حفظ طلبه في النظام وإرسال إشعار فوري لمهندسينا. اشكر العميل بحرارة وأكد له أن المهندس المختص سيتواصل معه عبر الهاتف أو الواتساب في أقرب وقت لمناقشة مقايسة مشروعه.`
                   : `Client just provided contact info (Name: ${leadName}, Phone: ${leadPhone}). Details were forwarded to our engineers. Thank the client warmly and confirm that an engineer will contact them promptly.`
-                : undefined;
+                : null;
 
               const aiResult = await chatWithGemini({
                 input: lastUserMessage,
                 messages,
                 previousInteractionId: previousId,
                 locale,
-                systemPromptOverride: promptOverrideNote,
+                systemPromptOverride: undefined,
+                userContext: userProfile,
+                leadOverrideNote: promptOverrideNote,
                 queryNeon,
               });
 
@@ -913,6 +939,11 @@ const server = http.createServer(async (req, res) => {
         FIREBASE_SERVICE_ACCOUNT: process.env.FIREBASE_SERVICE_ACCOUNT || '',
         FIREBASE_PROJECT_ID: process.env.FIREBASE_PROJECT_ID || 'coffee-spark-ai-barista-1b800',
         ADMIN_SECRET_KEY: process.env.ADMIN_SECRET_KEY || '',
+        R2_ACCOUNT_ID: process.env.R2_ACCOUNT_ID || '',
+        R2_ACCESS_KEY_ID: process.env.R2_ACCESS_KEY_ID || '',
+        R2_SECRET_ACCESS_KEY: process.env.R2_SECRET_ACCESS_KEY || '',
+        R2_BUCKET_NAME: process.env.R2_BUCKET_NAME || 'powerof',
+        R2_PUBLIC_URL: process.env.R2_PUBLIC_URL || 'https://pub-e9788e46474044d585e2622e2c6ce74d.r2.dev',
       },
     });
     if (matched) return;

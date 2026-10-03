@@ -1,6 +1,6 @@
 // ─── GEMINI AI MULTI-KEY & STATEFUL ENGINE ─────────────────────────────────
 import { getGeminiApiKeys, markKeyExhausted, markKeyHealthy } from './keys.mjs';
-import { getCachedSystemPrompt } from './prompts.mjs';
+import { getCachedSystemPrompt, buildAugmentedSystemPrompt } from './prompts.mjs';
 
 function extractInteractionsText(data) {
   if (!data) return '';
@@ -36,6 +36,21 @@ export function getSuggestedActions(text = '', locale = 'ar') {
 
   const actions = [];
 
+  // 1. استفسار أو طلب أو تقديم خدمات مجتمع المهنيين والحرفيين
+  if (/مهني|فني|صنايعي|مقاول|معلم|خدمة|شغل|وظيفة|نشر|إعلان|سوق|مجتمع|سباك|كهربائي|دهان|حداد|بلط|نجار|عمالة|technician|craftsman|community|contractor|job|hire/.test(lower)) {
+    actions.push({
+      title: isAr ? '👷 تصفح مجتمع المهنيين' : '👷 Browse Professionals',
+      screen: '/marketplace',
+      action: 'marketplace',
+    });
+    actions.push({
+      title: isAr ? '➕ أضف عملك أو خدمتك' : '➕ Post Work or Service',
+      screen: '/marketplace/create',
+      action: 'create_listing',
+    });
+  }
+
+  // 2. الأسعار والمقايسات
   if (/سعر|تكلفة|عرض|كم|احسب|price|cost|quote/.test(lower)) {
     actions.push({
       title: isAr ? '📝 طلب مقايسة وعرض سعر' : '📝 Request a Quote',
@@ -44,6 +59,7 @@ export function getSuggestedActions(text = '', locale = 'ar') {
     });
   }
 
+  // 3. المشاريع وسابقة الأعمال
   if (/مشروع|سابقة|أعمال|صور|برج|واجهات|project|work/.test(lower)) {
     actions.push({
       title: isAr ? '🏗️ تصفح معرض المشاريع' : '🏗️ View Executed Projects',
@@ -52,12 +68,25 @@ export function getSuggestedActions(text = '', locale = 'ar') {
     });
   }
 
-  actions.push({
-    title: isAr ? '✨ خدمات الزجاج والألمنيوم' : '✨ Our Services',
-    screen: '/services',
-    action: 'services',
-  });
+  // 4. الخدمات العامة
+  if (actions.length < 3) {
+    actions.push({
+      title: isAr ? '✨ خدمات الزجاج والألمنيوم' : '✨ Our Services',
+      screen: '/services',
+      action: 'services',
+    });
+  }
 
+  // 5. رابط مجتمع المهنيين كخيار سريع
+  if (actions.length < 3) {
+    actions.push({
+      title: isAr ? '👷 مجتمع المهنيين' : '👷 Professionals Community',
+      screen: '/marketplace',
+      action: 'marketplace',
+    });
+  }
+
+  // 6. التواصل المباشر
   if (actions.length < 3) {
     actions.push({
       title: isAr ? '📞 تواصل مع مهندسينا' : '📞 Contact an Engineer',
@@ -66,7 +95,7 @@ export function getSuggestedActions(text = '', locale = 'ar') {
     });
   }
 
-  return actions;
+  return actions.slice(0, 3);
 }
 
 export function getSmartFallbackResponse({
@@ -83,6 +112,13 @@ export function getSmartFallbackResponse({
     return isAr
       ? `شكراً لك أخي الكريم! تم استلام بياناتك بنجاح (${leadPhone}) وإرسال إشعار فوري للفريق الهندسي، وسيقوم مهندسنا المختص بالاتصال بك في أقرب وقت ممكن لمناقشة تفاصيل مشروعك.`
       : `Thank you! Your contact details (${leadPhone}) have been received and forwarded to our engineering team. An engineer will contact you shortly.`;
+  }
+
+  // استفسار عن المهنيين أو الخدمات أو نشر الأعمال
+  if (/مهني|فني|صنايعي|مقاول|معلم|خدمة|شغل|وظيفة|نشر|إعلان|سوق|مجتمع|سباك|كهربائي|دهان|حداد|technician|craftsman|community/.test(lower)) {
+    return isAr
+      ? `يسعدنا توجيهكم إلى **مجتمع المهنيين والحرفيين** في التطبيق! 👷‍♂️\n\n- إذا كنت تبحث عن فنيين أو مقاولين معتمدين لأعمال التشطيب والصيانة، يمكنك [تصفح مجتمع المهنيين](/marketplace).\n- وإذا كنت فنيّاً أو مقاولاً وترغب بعرض خدماتك وأعمالك للعملاء، يمكنك [إضافة عملك أو خدمتك مجاناً](/marketplace/create).`
+      : `Welcome to the **Professionals Community**! 👷‍♂️\n\n- Find verified technicians and contractors at [Professionals Community](/marketplace).\n- Showcase your own services and works at [Add Your Service](/marketplace/create).`;
   }
 
   if (/سعر|تكلفة|كم|فلوس|متر|price|cost|estimate/.test(lower)) {
@@ -104,8 +140,8 @@ export function getSmartFallbackResponse({
   }
 
   return isAr
-    ? `أهلاً بك في ${companyName} 🏗️\n\nأنا مساعدك الهندسي الذكي، يسعدني تقديم المشورة الفنية حول أعمال واجهات الزجاج، السيكوريت، الألمنيوم، والكلادينج، والإجابة عن كافة استفساراتكم حول [المشاريع المنفذة](/projects) و[الخدمات المتاحة](/services). كيف يمكنني خدمتك اليوم؟`
-    : `Welcome to ${companyName} 🏗️\n\nI am your AI Engineering Assistant, here to provide technical advice on glass facades, securit, aluminum, and cladding. How can I assist you with your project today?`;
+    ? `أهلاً بك في منصة ${companyName} 🏗️\n\nأنا مساعدك الهندسي الذكي، يسعدني تقديم المشورة الفنية حول أعمال واجهات الزجاج، السيكوريت، الألمنيوم، والكلادينج، وتوجيهكم إلى [معرض المشاريع المنفذة](/projects)، [الخدمات المتاحة](/services)، أو [مجتمع المهنيين والحرفيين](/marketplace) للتواصل مع أمهر الفنيين والمقاولين. كيف يمكنني خدمتك اليوم؟`
+    : `Welcome to ${companyName} 🏗️\n\nI am your AI Engineering Assistant, here to provide technical advice on glass facades, securit, aluminum, cladding, and our [Professionals Community](/marketplace). How can I assist you with your project today?`;
 }
 
 export async function chatWithGemini({
@@ -114,6 +150,8 @@ export async function chatWithGemini({
   previousInteractionId = null,
   locale = 'ar',
   systemPromptOverride,
+  userContext = null,
+  leadOverrideNote = null,
   queryNeon,
 }) {
   const keys = getGeminiApiKeys();
@@ -123,7 +161,13 @@ export async function chatWithGemini({
   }
 
   const promptConfig = await getCachedSystemPrompt(queryNeon, locale);
-  const systemInstruction = systemPromptOverride || promptConfig.prompt;
+  const baseInstruction = systemPromptOverride || promptConfig.prompt;
+  const systemInstruction = buildAugmentedSystemPrompt({
+    basePrompt: baseInstruction,
+    userContext,
+    leadNote: leadOverrideNote,
+    locale,
+  });
   const model = process.env.GEMINI_MODEL || promptConfig.model || 'gemini-2.5-flash';
 
   for (let i = 0; i < keys.length; i++) {
@@ -133,10 +177,9 @@ export async function chatWithGemini({
     // 1. تجربة Stateful Interactions API
     try {
       const interactionPayload = { model, input };
+      interactionPayload.system_instruction = systemInstruction;
       if (previousInteractionId) {
         interactionPayload.previous_interaction_id = previousInteractionId;
-      } else {
-        interactionPayload.system_instruction = systemInstruction;
       }
 
       const res = await fetch('https://generativelanguage.googleapis.com/v1beta/interactions', {

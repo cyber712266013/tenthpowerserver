@@ -1,4 +1,4 @@
-const BASE_URL = 'https://tenthpowerserver.netlify.app';
+const BASE_URL = 'https://tenthpowerserver1.netlify.app';
 
 async function testQuoteToTelegram() {
   console.log('Sending live test quote request to Netlify API...');
