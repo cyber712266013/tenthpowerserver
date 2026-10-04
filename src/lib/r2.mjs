@@ -1,11 +1,7 @@
 import { S3Client, PutObjectCommand, DeleteObjectCommand } from '@aws-sdk/client-s3';
 import { randomUUID } from 'node:crypto';
 
-let s3ClientInstance = null;
-
 function getS3Client(config = {}) {
-  if (s3ClientInstance) return s3ClientInstance;
-
   const accountId = config.R2_ACCOUNT_ID || process.env.R2_ACCOUNT_ID;
   const accessKeyId = config.R2_ACCESS_KEY_ID || process.env.R2_ACCESS_KEY_ID;
   const secretAccessKey = config.R2_SECRET_ACCESS_KEY || process.env.R2_SECRET_ACCESS_KEY;
@@ -14,7 +10,7 @@ function getS3Client(config = {}) {
     throw new Error('Cloudflare R2 credentials missing (R2_ACCOUNT_ID, R2_ACCESS_KEY_ID, R2_SECRET_ACCESS_KEY)');
   }
 
-  s3ClientInstance = new S3Client({
+  return new S3Client({
     region: 'auto',
     endpoint: `https://${accountId}.r2.cloudflarestorage.com`,
     credentials: {
@@ -22,8 +18,6 @@ function getS3Client(config = {}) {
       secretAccessKey,
     },
   });
-
-  return s3ClientInstance;
 }
 
 const MIME_MAP = {

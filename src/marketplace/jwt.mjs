@@ -39,7 +39,17 @@ export function verifyJwt(token, secret) {
 }
 
 export function extractAuthUser(req, jwtSecret) {
-  const authHeader = req.headers['authorization'] || '';
+  // Support both Web API Request (Netlify/Edge) and Node.js IncomingMessage
+  let authHeader = '';
+  if (req && req.headers) {
+    if (typeof req.headers.get === 'function') {
+      // Web API Headers (Netlify Functions)
+      authHeader = req.headers.get('authorization') || req.headers.get('Authorization') || '';
+    } else {
+      // Node.js IncomingMessage headers
+      authHeader = req.headers['authorization'] || req.headers['Authorization'] || '';
+    }
+  }
   const token = authHeader.replace(/^Bearer\s+/i, '').trim();
   if (!token) return null;
   return verifyJwt(token, jwtSecret);
