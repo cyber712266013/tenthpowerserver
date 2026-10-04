@@ -163,6 +163,7 @@ const server = http.createServer(async (req, res) => {
   const json = (data, status = 200) => {
     res.writeHead(status, { 'Content-Type': 'application/json; charset=utf-8' });
     res.end(JSON.stringify(data));
+    return true;
   };
 
   try {

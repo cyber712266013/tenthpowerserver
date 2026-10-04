@@ -19,7 +19,7 @@ export default async (req, context) => {
   }
 
   const url = new URL(req.url);
-  const pathname = url.pathname;
+  const pathname = url.pathname.replace(/^\/\.netlify\/functions\/[^\/]+/, '');
 
   const json = (data, status = 200) => {
     return new Response(JSON.stringify(data), {
@@ -650,7 +650,7 @@ ${escapeHtml(data.message)}
         R2_PUBLIC_URL: process.env.R2_PUBLIC_URL || '',
       },
     });
-    if (matched) return;
+    if (matched) return matched;
 
     // 404
     return json({ success: false, error: 'Endpoint not found' }, 404);

@@ -22,7 +22,14 @@ export async function handleAdminRoutes({
   if (feature !== 'admin') return false;
 
   // ── التحقق من صلاحيات الأدمن ──────────────────────────────────────────────
-  const adminKey = req.headers['x-admin-key'] || req.headers['admin-secret-key'];
+  const getHeader = (name) => {
+    if (!req || !req.headers) return '';
+    if (typeof req.headers.get === 'function') {
+      return req.headers.get(name) || req.headers.get(name.toLowerCase()) || '';
+    }
+    return req.headers[name] || req.headers[name.toLowerCase()] || '';
+  };
+  const adminKey = getHeader('x-admin-key') || getHeader('admin-secret-key');
   const isAdminKey = config.ADMIN_SECRET_KEY && adminKey === config.ADMIN_SECRET_KEY;
   const isAdminJwt = authUser && (authUser.role === 'admin' || authUser.role === 'moderator');
 
