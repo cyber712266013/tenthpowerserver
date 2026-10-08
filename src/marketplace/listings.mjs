@@ -246,16 +246,18 @@ export async function handleListingRoutes({
     }
 
     const listingId = randomUUID();
+    const isAutoPublish = process.env.AUTO_PUBLISH_LISTINGS !== 'false';
+    const initialStatus = isAutoPublish ? 'published' : 'pending';
 
     await queryNeon(
       `INSERT INTO listings (
          id, user_id, category_id, title, description, price, price_negotiable,
          currency, listing_type, condition, city, location_lat, location_lng,
-         show_phone, show_whatsapp, show_telegram, status, created_at, updated_at
+         show_phone, show_whatsapp, show_telegram, status, published_at, created_at, updated_at
        ) VALUES (
          $1, $2, $3, $4, $5, $6, $7,
          $8, $9, $10, $11, $12, $13,
-         $14, $15, $16, 'pending', now(), now()
+         $14, $15, $16, $17, ${isAutoPublish ? 'now()' : 'null'}, now(), now()
        )`,
       [
         listingId,
@@ -274,6 +276,7 @@ export async function handleListingRoutes({
         Boolean(show_phone),
         Boolean(show_whatsapp),
         Boolean(show_telegram),
+        initialStatus,
       ]
     );
 
@@ -295,7 +298,7 @@ export async function handleListingRoutes({
       }
     }
 
-    // إشعار تيليجرام للأدمن عند وصول إعلان جديد للمراجعة
+    // إشعار تيليجرام للأدمن عند وصول إعلان جديد
     if (notifyTelegramAdmins) {
       try {
         const userRow = await queryNeon(`SELECT display_name FROM app_users WHERE id = $1`, [authUser.sub]);
@@ -305,6 +308,7 @@ export async function handleListingRoutes({
           title: String(title).trim(),
           seller: userRow[0]?.display_name || authUser.email,
           city: city || '',
+          status: initialStatus,
         });
       } catch (err) {
         console.warn('Telegram notify error:', err.message);
@@ -315,8 +319,10 @@ export async function handleListingRoutes({
       success: true,
       data: {
         id: listingId,
-        status: 'pending',
-        message: 'تم إرسال إعلانك بنجاح وهو قيد المراجعة للنشر',
+        status: initialStatus,
+        message: isAutoPublish
+          ? 'تم نشر إعلانك بنجاح وهو متاح في السوق الآن'
+          : 'تم إرسال إعلانك بنجاح وهو قيد المراجعة للنشر',
       },
     }, 201);
   }

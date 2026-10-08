@@ -161,7 +161,12 @@ const server = http.createServer(async (req, res) => {
   const pathname = url.pathname;
 
   const json = (data, status = 200) => {
-    res.writeHead(status, { 'Content-Type': 'application/json; charset=utf-8' });
+    res.writeHead(status, {
+      'Content-Type': 'application/json; charset=utf-8',
+      'Cache-Control': 'no-store, no-cache, must-revalidate, proxy-revalidate, max-age=0',
+      'Pragma': 'no-cache',
+      'Expires': '0',
+    });
     res.end(JSON.stringify(data));
     return true;
   };
